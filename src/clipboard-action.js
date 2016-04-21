@@ -1,3 +1,5 @@
+import select from 'select';
+
 /**
  * Inner class which performs selection from either `text` or `target`
  * properties and then executes copy or cut operations.
@@ -30,17 +32,11 @@ class ClipboardAction {
      * on the existence of `text` and `target` properties.
      */
     initSelection() {
-        if (this.text && this.target) {
-            throw new Error('Multiple attributes declared, use either "target" or "text"');
-        }
-        else if (this.text) {
+        if (this.text) {
             this.selectFake();
         }
         else if (this.target) {
             this.selectTarget();
-        }
-        else {
-            throw new Error('Missing required attributes, use either "target" or "text"');
         }
     }
 
@@ -49,21 +45,30 @@ class ClipboardAction {
      * and makes a selection on it.
      */
     selectFake() {
+        const isRTL = document.documentElement.getAttribute('dir') == 'rtl';
+
         this.removeFake();
 
         this.fakeHandler = document.body.addEventListener('click', () => this.removeFake());
 
         this.fakeElem = document.createElement('textarea');
-        this.fakeElem.style.position = 'absolute';
-        this.fakeElem.style.left = '-9999px';
+        // Prevent zooming on iOS
+        this.fakeElem.style.fontSize = '12pt';
+        // Reset box model
+        this.fakeElem.style.border = '0';
+        this.fakeElem.style.padding = '0';
+        this.fakeElem.style.margin = '0';
+        // Move element out of screen horizontally
+        this.fakeElem.style.position = 'fixed';
+        this.fakeElem.style[ isRTL ? 'right' : 'left' ] = '-9999px';
+        // Move element to the same position vertically
         this.fakeElem.style.top = (window.pageYOffset || document.documentElement.scrollTop) + 'px';
         this.fakeElem.setAttribute('readonly', '');
         this.fakeElem.value = this.text;
-        this.selectedText = this.text;
 
         document.body.appendChild(this.fakeElem);
 
-        this.fakeElem.select();
+        this.selectedText = select(this.fakeElem);
         this.copyText();
     }
 
@@ -87,20 +92,7 @@ class ClipboardAction {
      * Selects the content from element passed on `target` property.
      */
     selectTarget() {
-        if (this.target.nodeName === 'INPUT' || this.target.nodeName === 'TEXTAREA') {
-            this.target.select();
-            this.selectedText = this.target.value;
-        }
-        else {
-            let range = document.createRange();
-            let selection = window.getSelection();
-
-            selection.removeAllRanges();
-            range.selectNodeContents(this.target);
-            selection.addRange(range);
-            this.selectedText = selection.toString();
-        }
-
+        this.selectedText = select(this.target);
         this.copyText();
     }
 
@@ -181,6 +173,14 @@ class ClipboardAction {
     set target(target) {
         if (target !== undefined) {
             if (target && typeof target === 'object' && target.nodeType === 1) {
+                if (this.action === 'copy' && target.hasAttribute('disabled')) {
+                    throw new Error('Invalid "target" attribute. Please use "readonly" instead of "disabled" attribute');
+                }
+
+                if (this.action === 'cut' && (target.hasAttribute('readonly') || target.hasAttribute('disabled'))) {
+                    throw new Error('Invalid "target" attribute. You can\'t cut text from elements with "readonly" or "disabled" attributes');
+                }
+
                 this._target = target;
             }
             else {
@@ -205,4 +205,4 @@ class ClipboardAction {
     }
 }
 
-export default ClipboardAction;
+module.exports = ClipboardAction;

@@ -1,6 +1,6 @@
 import Clipboard from '../src/clipboard';
 import ClipboardAction from '../src/clipboard-action';
-import Delegate from 'delegate-events';
+import listen from 'good-listener';
 
 describe('Clipboard', () => {
     before(() => {
@@ -9,8 +9,14 @@ describe('Clipboard', () => {
         global.button.setAttribute('data-clipboard-text', 'foo');
         document.body.appendChild(global.button);
 
+        global.span = document.createElement('span');
+        global.span.innerHTML = 'bar';
+
+        global.button.appendChild(span);
+
         global.event = {
-            delegateTarget: global.button
+            target: global.button,
+            currentTarget: global.button
         };
     });
 
@@ -18,7 +24,7 @@ describe('Clipboard', () => {
         document.body.innerHTML = '';
     });
 
-    describe('#resolveOptions', function() {
+    describe('#resolveOptions', () => {
         before(() => {
             global.fn = function() {};
         });
@@ -48,45 +54,10 @@ describe('Clipboard', () => {
         });
     });
 
-    describe('#delegateClick', function() {
-        before(() => {
-            global.spy = sinon.spy(Delegate, 'bind');
-        });
-
-        after(() => {
-            global.spy.restore();
-        });
-
-        it('should delegate a click event to the passed selector', () => {
-            let element = document.body;
-            let selector = '.btn';
-            let event = 'click';
-
-            let clipboard = new Clipboard(selector);
-
-            assert.ok(global.spy.calledOnce);
-            assert.ok(global.spy.calledWith(element, selector, event));
-        });
-    });
-
-    describe('#undelegateClick', function() {
-        before(() => {
-            global.spy = sinon.spy(Delegate, 'unbind');
-        });
-
-        after(() => {
-            global.spy.restore();
-        });
-
-        it('should undelegate a click event', () => {
-            let element = document.body;
-            let event = 'click';
-
+    describe('#listenClick', () => {
+        it('should add a click event listener to the passed selector', () => {
             let clipboard = new Clipboard('.btn');
-            clipboard.undelegateClick();
-
-            assert.ok(global.spy.calledOnce);
-            assert.ok(global.spy.calledWith(element, event));
+            assert.isObject(clipboard.listener);
         });
     });
 
@@ -98,13 +69,22 @@ describe('Clipboard', () => {
             assert.instanceOf(clipboard.clipboardAction, ClipboardAction);
         });
 
-        it('should throws exception target', done => {
+        it('should use an event\'s currentTarget when not equal to target', () => {
+            let clipboard = new Clipboard('.btn');
+            let bubbledEvent = { target: global.span, currentTarget: global.button };
+
+            clipboard.onClick(bubbledEvent);
+            assert.instanceOf(clipboard.clipboardAction, ClipboardAction);
+        });
+
+        it('should throw an exception when target is invalid', done => {
             try {
                 var clipboard = new Clipboard('.btn', {
                     target: function() {
                         return null;
                     }
                 });
+
                 clipboard.onClick(global.event);
             }
             catch(e) {
